@@ -155,26 +155,34 @@ if not st.session_state.filtered_data.empty:
         # Debug coordinate info
         st.info(f"📍 Location: {current_data['filename']} → Lat: {lat:.4f}, Lon: {lon:.4f}")
         
-        # Create map with ONLY the best, fastest satellite imagery
-        m = geemap.Map(height="500px")
+        # Create map with NO default tiles to force satellite imagery
+        m = geemap.Map(basemap=None, height="500px")
         
-        # Set center FIRST, then add layers
-        m.set_center(lon, lat, zoom=16)  # geemap uses lon, lat order!
+        # Set center FIRST 
+        m.set_center(lon, lat, zoom=16)
         
-        # Add only the fastest, most reliable satellite tiles
-        # Google Satellite - most reliable and fast
+        # Force REAL satellite imagery (not vector tiles)
+        # Google Earth style satellite imagery
         m.add_tile_layer(
             url='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name='Google Satellite',
-            attribution='Google',
+            name='Google Satellite (Real)',
+            attribution='Google Earth',
             overlay=False
         )
         
-        # Esri World Imagery - backup high quality
+        # ESRI World Imagery - true satellite photos
         m.add_tile_layer(
-            url='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            name='Esri Satellite',
-            attribution='Esri',
+            url='https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            name='ESRI Satellite (High-Res)',
+            attribution='ESRI',
+            overlay=False
+        )
+        
+        # Bing Aerial - another real satellite option
+        m.add_tile_layer(
+            url='https://ecn.t3.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1',
+            name='Bing Aerial',
+            attribution='Microsoft Bing',
             overlay=False
         )
         
