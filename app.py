@@ -152,8 +152,8 @@ if not st.session_state.filtered_data.empty:
         current_data = st.session_state.filtered_data.iloc[st.session_state.current_index]
         lat, lon = current_data['lat'], current_data['lon']
         
-        # Create geemap Map with high-quality satellite imagery
-        m = geemap.Map(center=[lat, lon], zoom=19, height="500px")
+        # Create geemap Map with high-quality satellite imagery (zoom 17 for better loading)
+        m = geemap.Map(center=[lat, lon], zoom=17, height="500px")
         
         if ee_initialized:
             try:
@@ -167,7 +167,7 @@ if not st.session_state.filtered_data.empty:
         m.add_basemap('SATELLITE')  # Google Satellite
         m.add_basemap('Esri.WorldImagery')  # Esri World Imagery
         
-        # Add marker for current location
+        # Add marker for current location (centered)
         popup_text = f"""
         <b>Location:</b> {current_data['filename']}<br>
         <b>Coordinates:</b> {lat:.4f}, {lon:.4f}<br>
@@ -176,8 +176,10 @@ if not st.session_state.filtered_data.empty:
         """
         
         m.add_marker(location=[lat, lon], popup=popup_text)
+        m.set_center(lat, lon, zoom=17)  # Ensure centered on location
         
-        # Display map
+        # Display map with zoom info
+        st.info(f"📍 Centered at {lat:.4f}, {lon:.4f} (Zoom level 17 for fast loading)")
         m.to_streamlit(height=500)
     
     with col2:
