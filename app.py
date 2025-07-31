@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import geemap.foliumap as geemap
 import ee
+import json
 import os
 from datetime import datetime
 
@@ -33,13 +34,22 @@ def initialize_session_state():
 
 @st.cache_resource
 def initialize_ee():
-    """Initialize Google Earth Engine"""
+    """Initialize Google Earth Engine with service account"""
     try:
-        ee.Initialize()
-        return True
+        if "gee" in st.secrets:
+            service_account_info = json.loads(st.secrets["gee"]["service_account"])
+            credentials = ee.ServiceAccountCredentials(
+                service_account_info["client_email"],
+                key_data=st.secrets["gee"]["service_account"]
+            )
+            ee.Initialize(credentials)
+            return True
+        else:
+            # Try default initialization
+            ee.Initialize()
+            return True
     except Exception as e:
-        st.error(f"Failed to initialize Google Earth Engine: {e}")
-        st.info("The app will work with basic satellite imagery. For high-quality Google Earth Engine imagery, please set up authentication.")
+        st.warning(f"Earth Engine not available: {str(e)[:100]}... Using basic satellite imagery.")
         return False
 
 initialize_session_state()
@@ -142,38 +152,20 @@ if not st.session_state.filtered_data.empty:
         current_data = st.session_state.filtered_data.iloc[st.session_state.current_index]
         lat, lon = current_data['lat'], current_data['lon']
         
-        # Create geemap Map
+        # Create geemap Map with high-quality satellite imagery
         m = geemap.Map(center=[lat, lon], zoom=19, height="500px")
         
         if ee_initialized:
-            # Add high-quality Google Earth Engine satellite imagery
             try:
-                # Use the most recent Sentinel-2 imagery
-                sentinel2 = ee.ImageCollection('COPERNICUS/S2_SR') \
-                    .filterBounds(ee.Geometry.Point(lon, lat)) \
-                    .filterDate('2023-01-01', '2024-12-31') \
-                    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
-                    .first()
-                
-                # Visualization parameters for true color
-                vis_params = {
-                    'bands': ['B4', 'B3', 'B2'],
-                    'min': 0,
-                    'max': 3000,
-                    'gamma': 1.4
-                }
-                
-                m.addLayer(sentinel2, vis_params, 'Sentinel-2 (High-Res)')
-                
-                # Also add Google Satellite as backup
-                m.add_basemap('SATELLITE')
-                
-            except Exception as e:
-                st.warning(f"Could not load Sentinel-2 imagery: {e}")
-                m.add_basemap('SATELLITE')
-        else:
-            # Fallback to basic satellite imagery
-            m.add_basemap('SATELLITE')
+                # Add very high resolution satellite imagery
+                image = ee.Image('GOOGLE/RESOLUTION_30M_DAILY').first()
+                m.addLayer(image, {'bands': ['B4', 'B3', 'B2'], 'max': 255}, 'Google High-Res')
+            except:
+                pass
+        
+        # Add multiple high-quality basemaps as fallback
+        m.add_basemap('SATELLITE')  # Google Satellite
+        m.add_basemap('Esri.WorldImagery')  # Esri World Imagery
         
         # Add marker for current location
         popup_text = f"""
