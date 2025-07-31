@@ -152,33 +152,33 @@ if not st.session_state.filtered_data.empty:
         current_data = st.session_state.filtered_data.iloc[st.session_state.current_index]
         lat, lon = current_data['lat'], current_data['lon']
         
-        # Create geemap Map with reliable satellite imagery
-        m = geemap.Map(center=[lat, lon], zoom=17, height="500px")
+        # Debug coordinate info
+        st.info(f"📍 Location: {current_data['filename']} → Lat: {lat:.4f}, Lon: {lon:.4f}")
         
-        # Use simple, fast-loading satellite basemaps
-        m.add_basemap('Google Satellite')  # Most reliable
-        m.add_basemap('Esri World Imagery')  # Backup
+        # Create map with ONLY the best, fastest satellite imagery
+        m = geemap.Map(height="500px")
         
-        # Add simple tile layers that load fast
+        # Set center FIRST, then add layers
+        m.set_center(lon, lat, zoom=16)  # geemap uses lon, lat order!
+        
+        # Add only the fastest, most reliable satellite tiles
+        # Google Satellite - most reliable and fast
         m.add_tile_layer(
             url='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name='Google Satellite Direct',
-            attribution='Google'
+            name='Google Satellite',
+            attribution='Google',
+            overlay=False
         )
         
-        # Add marker for current location (centered)
-        popup_text = f"""
-        <b>Location:</b> {current_data['filename']}<br>
-        <b>Coordinates:</b> {lat:.4f}, {lon:.4f}<br>
-        <b>Max Category:</b> {current_data['max_category']}<br>
-        <b>Max Percentage:</b> {current_data['max_percentage']:.2f}%
-        """
+        # Esri World Imagery - backup high quality
+        m.add_tile_layer(
+            url='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            name='Esri Satellite',
+            attribution='Esri',
+            overlay=False
+        )
         
-        m.add_marker(location=[lat, lon], popup=popup_text)
-        m.set_center(lat, lon, zoom=17)  # Ensure centered on location
-        
-        # Display map with zoom info
-        st.info(f"📍 Centered at {lat:.4f}, {lon:.4f} (Zoom level 17 for fast loading)")
+        # Display map
         m.to_streamlit(height=500)
     
     with col2:
