@@ -135,15 +135,8 @@ elif filter_mode == "Any Category (Max %)":
         format="%.2f"
     )
     
-    # Show which categories to consider
-    categories_to_consider = st.sidebar.multiselect(
-        "Consider these categories:",
-        numeric_cols,
-        default=numeric_cols
-    )
-    
-    if not categories_to_consider:
-        categories_to_consider = numeric_cols
+    # Use all categories by default
+    categories_to_consider = numeric_cols
     
     filter_description = f"Max % across {len(categories_to_consider)} categories >= {threshold}%"
 
