@@ -183,68 +183,63 @@ if not st.session_state.filtered_data.empty:
         
         st.markdown("---")
         
-        # Show current label if exists
+        # Auto-default to NO for new locations (most won't have kilns)
         current_filename = current_data['filename']
-        current_label = st.session_state.labels.get(current_filename, None)
+        current_label = st.session_state.labels.get(current_filename, 0)  # Default to 0 (NO)
         
-        if current_label is not None:
-            label_text = "✅ YES - Brick kiln present" if current_label == 1 else "❌ NO - No brick kiln"
-            st.info(f"**Current label:** {label_text}")
+        # Auto-save as NO if not already labeled
+        if current_filename not in st.session_state.labels:
+            st.session_state.labels[current_filename] = 0
+            st.session_state.labeled_count += 1
+        
+        # Show current status with better UI
+        if current_label == 1:
+            st.success("✅ **BRICK KILN PRESENT** - Click NO to change")
         else:
-            st.info("**Current label:** Not labeled yet")
+            st.info("❌ **NO BRICK KILN** (default) - Click YES if you see one")
         
-        st.write("**Is there a brick kiln visible at this location?**")
+        st.markdown("---")
         
-        col_yes, col_no = st.columns(2)
+        # Simple YES button (only needed if kiln is present)
+        if st.button("🧱 **YES - BRICK KILN PRESENT**", type="primary", use_container_width=True):
+            st.session_state.labels[current_filename] = 1
+            if st.session_state.current_index < total_locations - 1:
+                st.session_state.current_index += 1
+            st.rerun()
         
-        with col_yes:
-            if st.button("✅ YES", type="primary", use_container_width=True):
-                if current_filename not in st.session_state.labels:
-                    st.session_state.labeled_count += 1
-                st.session_state.labels[current_filename] = 1
-                if st.session_state.current_index < total_locations - 1:
-                    st.session_state.current_index += 1
-                st.rerun()
-        
-        with col_no:
-            button_type = "primary" if current_label is None else "secondary"
-            if st.button("❌ NO", type=button_type, use_container_width=True):
-                if current_filename not in st.session_state.labels:
-                    st.session_state.labeled_count += 1
+        # Small NO button (just in case user wants to revert)
+        if current_label == 1:  # Only show if currently YES
+            if st.button("❌ Change to NO", use_container_width=True):
                 st.session_state.labels[current_filename] = 0
                 if st.session_state.current_index < total_locations - 1:
                     st.session_state.current_index += 1
                 st.rerun()
         
-        # Quick "No" button for rapid labeling
-        if st.button("⚡ Quick NO (Default)", help="Label as NO and move to next", use_container_width=True):
-            if current_filename not in st.session_state.labels:
-                st.session_state.labeled_count += 1
-            st.session_state.labels[current_filename] = 0
-            if st.session_state.current_index < total_locations - 1:
-                st.session_state.current_index += 1
-            st.rerun()
-        
         st.markdown("---")
         
-        # Navigation
+        # Simple navigation
         col_prev, col_next = st.columns(2)
         
         with col_prev:
-            if st.button("⬅️ Previous", disabled=(st.session_state.current_index == 0)):
+            if st.button("⬅️ **PREVIOUS**", disabled=(st.session_state.current_index == 0), use_container_width=True):
                 st.session_state.current_index -= 1
                 st.rerun()
         
         with col_next:
-            if st.button("➡️ Next", disabled=(st.session_state.current_index >= total_locations - 1)):
-                st.session_state.current_index += 1
-                st.rerun()
-        
-        # Skip button
-        if st.button("⏭️ Skip", use_container_width=True):
             if st.session_state.current_index < total_locations - 1:
-                st.session_state.current_index += 1
-                st.rerun()
+                if st.button("➡️ **NEXT**", use_container_width=True):
+                    st.session_state.current_index += 1
+                    st.rerun()
+            else:
+                st.success("🎉 **ALL DONE!**")
+        
+        st.markdown("---")
+        
+        # Auto-save progress info
+        st.write("**💾 Auto-Save:**")
+        st.write("• Every location auto-labeled as 'NO KILN' by default")
+        st.write("• Only click YES if you actually see a brick kiln")
+        st.write("• Progress saved automatically as you navigate")
         
         st.markdown("---")
         
