@@ -56,25 +56,27 @@ if filter_mode == "Specific Category":
         index=4 if 'Built-up' in numeric_cols else 0
     )
     
-    # Threshold slider
-    threshold = st.sidebar.slider(
+    # Direct number input for threshold
+    threshold = st.sidebar.number_input(
         f"Minimum {selected_category} percentage:",
         min_value=0.0,
         max_value=100.0,
-        value=10.0,
-        step=0.1
+        value=99.90,
+        step=0.01,
+        format="%.2f"
     )
     
     filter_description = f"{selected_category} >= {threshold}%"
 
 elif filter_mode == "Any Category (Max %)":
-    # Threshold for maximum percentage across all categories
-    threshold = st.sidebar.slider(
+    # Direct number input for threshold
+    threshold = st.sidebar.number_input(
         "Minimum percentage (any category):",
         min_value=0.0,
         max_value=100.0,
-        value=50.0,
-        step=0.1
+        value=99.90,
+        step=0.01,
+        format="%.2f"
     )
     
     # Show which categories to consider
