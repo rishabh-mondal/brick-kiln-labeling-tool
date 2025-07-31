@@ -42,31 +42,83 @@ st.sidebar.header("🔍 Filtering Options")
 # Get all numeric columns (excluding filename)
 numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
 
-# Category selection
-selected_category = st.sidebar.selectbox(
-    "Select land cover category:",
-    numeric_cols,
-    index=4 if 'Built-up' in numeric_cols else 0
+# Filtering mode selection
+filter_mode = st.sidebar.radio(
+    "Filter by:",
+    ["Specific Category", "Any Category (Max %)", "All Locations"],
+    index=1
 )
 
-# Threshold slider
-threshold = st.sidebar.slider(
-    f"Minimum {selected_category} percentage:",
-    min_value=0.0,
-    max_value=100.0,
-    value=10.0,
-    step=0.1
-)
+if filter_mode == "Specific Category":
+    # Category selection
+    selected_category = st.sidebar.selectbox(
+        "Select land cover category:",
+        numeric_cols,
+        index=4 if 'Built-up' in numeric_cols else 0
+    )
+    
+    # Threshold slider
+    threshold = st.sidebar.slider(
+        f"Minimum {selected_category} percentage:",
+        min_value=0.0,
+        max_value=100.0,
+        value=10.0,
+        step=0.1
+    )
+    
+    filter_description = f"{selected_category} >= {threshold}%"
+
+elif filter_mode == "Any Category (Max %)":
+    # Threshold for maximum percentage across all categories
+    threshold = st.sidebar.slider(
+        "Minimum percentage (any category):",
+        min_value=0.0,
+        max_value=100.0,
+        value=50.0,
+        step=0.1
+    )
+    
+    # Show which categories to consider
+    categories_to_consider = st.sidebar.multiselect(
+        "Consider these categories:",
+        numeric_cols,
+        default=numeric_cols
+    )
+    
+    if not categories_to_consider:
+        categories_to_consider = numeric_cols
+    
+    filter_description = f"Max % across {len(categories_to_consider)} categories >= {threshold}%"
+
+else:  # All Locations
+    threshold = 0.0
+    filter_description = "All locations (no filter)"
 
 # Filter button
 if st.sidebar.button("Apply Filter", type="primary"):
-    filtered_df = df[df[selected_category] >= threshold].copy()
+    if filter_mode == "Specific Category":
+        filtered_df = df[df[selected_category] >= threshold].copy()
+        filtered_df['max_category'] = selected_category
+        filtered_df['max_percentage'] = filtered_df[selected_category]
+    elif filter_mode == "Any Category (Max %)":
+        # Find max percentage across selected categories for each row
+        filtered_df = df.copy()
+        filtered_df['max_percentage'] = filtered_df[categories_to_consider].max(axis=1)
+        filtered_df['max_category'] = filtered_df[categories_to_consider].idxmax(axis=1)
+        filtered_df = filtered_df[filtered_df['max_percentage'] >= threshold]
+    else:  # All Locations
+        filtered_df = df.copy()
+        filtered_df['max_percentage'] = filtered_df[numeric_cols].max(axis=1)
+        filtered_df['max_category'] = filtered_df[numeric_cols].idxmax(axis=1)
+    
+    # Add coordinates
     filtered_df['lat'], filtered_df['lon'] = zip(*filtered_df['filename'].apply(extract_coordinates))
+    
     st.session_state.filtered_data = filtered_df
     st.session_state.current_index = 0
     st.session_state.labels = {}
     st.session_state.labeled_count = 0
-    st.success(f"Found {len(filtered_df)} locations with {selected_category} >= {threshold}%")
+    st.success(f"Found {len(filtered_df)} locations matching: {filter_description}")
 
 # Main content
 if not st.session_state.filtered_data.empty:
@@ -123,16 +175,20 @@ if not st.session_state.filtered_data.empty:
         ).add_to(m)
         
         # Add marker for current location
+        popup_text = f"Location: {current_data['filename']}<br>"
+        popup_text += f"Max Category: {current_data['max_category']}<br>"
+        popup_text += f"Max Percentage: {current_data['max_percentage']:.2f}%"
+        
         folium.Marker(
             [lat, lon],
-            popup=f"Location: {current_data['filename']}<br>{selected_category}: {current_data[selected_category]:.2f}%",
+            popup=popup_text,
             icon=folium.Icon(color='red', icon='info-sign')
         ).add_to(m)
         
         folium.LayerControl().add_to(m)
         
         # Display map
-        st_folium(m, width=700, height=500, returned_data_type="last_object_clicked")
+        st_folium(m, width=700, height=500)
     
     with col2:
         st.subheader("🏷️ Labeling Interface")
@@ -148,7 +204,8 @@ if not st.session_state.filtered_data.empty:
         st.write("**Current Location:**")
         st.write(f"File: `{current_data['filename']}`")
         st.write(f"Coordinates: {lat:.4f}, {lon:.4f}")
-        st.write(f"{selected_category}: {current_data[selected_category]:.2f}%")
+        st.write(f"Dominant Category: {current_data['max_category']}")
+        st.write(f"Max Percentage: {current_data['max_percentage']:.2f}%")
         
         st.markdown("---")
         
@@ -211,7 +268,8 @@ if not st.session_state.filtered_data.empty:
                     'lat': row_data['lat'],
                     'lon': row_data['lon'],
                     'brick_kiln': label,
-                    f'{selected_category}_percentage': row_data[selected_category]
+                    'dominant_category': row_data['max_category'],
+                    'max_percentage': row_data['max_percentage']
                 })
             
             results_df = pd.DataFrame(results)
