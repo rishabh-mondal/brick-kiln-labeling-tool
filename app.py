@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import geemap.foliumap as geemap
-import ee
-import json
 import os
 from datetime import datetime
 
@@ -32,30 +30,9 @@ def initialize_session_state():
     if 'labeled_count' not in st.session_state:
         st.session_state.labeled_count = 0
 
-@st.cache_resource
-def initialize_ee():
-    """Initialize Google Earth Engine with service account"""
-    try:
-        if "gee" in st.secrets:
-            service_account_info = json.loads(st.secrets["gee"]["service_account"])
-            credentials = ee.ServiceAccountCredentials(
-                service_account_info["client_email"],
-                key_data=st.secrets["gee"]["service_account"]
-            )
-            ee.Initialize(credentials)
-            return True
-        else:
-            # Try default initialization
-            ee.Initialize()
-            return True
-    except Exception as e:
-        st.warning(f"Earth Engine not available: {str(e)[:100]}... Using basic satellite imagery.")
-        return False
-
 initialize_session_state()
 
-# Initialize Earth Engine and load data
-ee_initialized = initialize_ee()
+# Load data
 df = load_data()
 
 # Sidebar for filtering
