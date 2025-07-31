@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
+import geemap.foliumap as geemap
+import ee
 import os
 from datetime import datetime
 
@@ -31,9 +31,21 @@ def initialize_session_state():
     if 'labeled_count' not in st.session_state:
         st.session_state.labeled_count = 0
 
+@st.cache_resource
+def initialize_ee():
+    """Initialize Google Earth Engine"""
+    try:
+        ee.Initialize()
+        return True
+    except Exception as e:
+        st.error(f"Failed to initialize Google Earth Engine: {e}")
+        st.info("The app will work with basic satellite imagery. For high-quality Google Earth Engine imagery, please set up authentication.")
+        return False
+
 initialize_session_state()
 
-# Load data
+# Initialize Earth Engine and load data
+ee_initialized = initialize_ee()
 df = load_data()
 
 # Sidebar for filtering
@@ -130,65 +142,51 @@ if not st.session_state.filtered_data.empty:
         current_data = st.session_state.filtered_data.iloc[st.session_state.current_index]
         lat, lon = current_data['lat'], current_data['lon']
         
-        # Create map centered on current location with high-res satellite as default
-        m = folium.Map(
-            location=[lat, lon],
-            zoom_start=19,
-            tiles=None
-        )
+        # Create geemap Map
+        m = geemap.Map(center=[lat, lon], zoom=19, height="500px")
         
-        # Add multiple high-resolution satellite tile layers
-        # Esri World Imagery (very high resolution)
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri World Imagery',
-            name='Esri Satellite (Default)',
-            overlay=False,
-            control=True
-        ).add_to(m)
-        
-        # Google Satellite (high resolution)
-        folium.TileLayer(
-            tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            attr='Google',
-            name='Google Satellite',
-            overlay=False,
-            control=True
-        ).add_to(m)
-        
-        # Bing Satellite (alternative high-res option)
-        folium.TileLayer(
-            tiles='https://ecn.t3.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1',
-            attr='Microsoft Bing',
-            name='Bing Satellite',
-            overlay=False,
-            control=True,
-            subdomains='0123'
-        ).add_to(m)
-        
-        # OpenStreetMap for reference
-        folium.TileLayer(
-            tiles='OpenStreetMap',
-            name='OpenStreetMap',
-            overlay=False,
-            control=True
-        ).add_to(m)
+        if ee_initialized:
+            # Add high-quality Google Earth Engine satellite imagery
+            try:
+                # Use the most recent Sentinel-2 imagery
+                sentinel2 = ee.ImageCollection('COPERNICUS/S2_SR') \
+                    .filterBounds(ee.Geometry.Point(lon, lat)) \
+                    .filterDate('2023-01-01', '2024-12-31') \
+                    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
+                    .first()
+                
+                # Visualization parameters for true color
+                vis_params = {
+                    'bands': ['B4', 'B3', 'B2'],
+                    'min': 0,
+                    'max': 3000,
+                    'gamma': 1.4
+                }
+                
+                m.addLayer(sentinel2, vis_params, 'Sentinel-2 (High-Res)')
+                
+                # Also add Google Satellite as backup
+                m.add_basemap('SATELLITE')
+                
+            except Exception as e:
+                st.warning(f"Could not load Sentinel-2 imagery: {e}")
+                m.add_basemap('SATELLITE')
+        else:
+            # Fallback to basic satellite imagery
+            m.add_basemap('SATELLITE')
         
         # Add marker for current location
-        popup_text = f"Location: {current_data['filename']}<br>"
-        popup_text += f"Max Category: {current_data['max_category']}<br>"
-        popup_text += f"Max Percentage: {current_data['max_percentage']:.2f}%"
+        popup_text = f"""
+        <b>Location:</b> {current_data['filename']}<br>
+        <b>Coordinates:</b> {lat:.4f}, {lon:.4f}<br>
+        <b>Max Category:</b> {current_data['max_category']}<br>
+        <b>Max Percentage:</b> {current_data['max_percentage']:.2f}%
+        """
         
-        folium.Marker(
-            [lat, lon],
-            popup=popup_text,
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(m)
-        
-        folium.LayerControl().add_to(m)
+        m.add_marker(location=[lat, lon], popup=popup_text)
         
         # Display map
-        st_folium(m, width=700, height=500)
+        m.to_streamlit(height=500)
     
     with col2:
         st.subheader("🏷️ Labeling Interface")
@@ -209,28 +207,47 @@ if not st.session_state.filtered_data.empty:
         
         st.markdown("---")
         
-        # Labeling buttons
+        # Show current label if exists
+        current_filename = current_data['filename']
+        current_label = st.session_state.labels.get(current_filename, None)
+        
+        if current_label is not None:
+            label_text = "✅ YES - Brick kiln present" if current_label == 1 else "❌ NO - No brick kiln"
+            st.info(f"**Current label:** {label_text}")
+        else:
+            st.info("**Current label:** Not labeled yet")
+        
         st.write("**Is there a brick kiln visible at this location?**")
         
         col_yes, col_no = st.columns(2)
         
         with col_yes:
             if st.button("✅ YES", type="primary", use_container_width=True):
-                st.session_state.labels[current_data['filename']] = 1
-                if st.session_state.current_index not in [i for i, f in enumerate(st.session_state.filtered_data['filename']) if f in st.session_state.labels]:
+                if current_filename not in st.session_state.labels:
                     st.session_state.labeled_count += 1
+                st.session_state.labels[current_filename] = 1
                 if st.session_state.current_index < total_locations - 1:
                     st.session_state.current_index += 1
                 st.rerun()
         
         with col_no:
-            if st.button("❌ NO", use_container_width=True):
-                st.session_state.labels[current_data['filename']] = 0
-                if st.session_state.current_index not in [i for i, f in enumerate(st.session_state.filtered_data['filename']) if f in st.session_state.labels]:
+            button_type = "primary" if current_label is None else "secondary"
+            if st.button("❌ NO", type=button_type, use_container_width=True):
+                if current_filename not in st.session_state.labels:
                     st.session_state.labeled_count += 1
+                st.session_state.labels[current_filename] = 0
                 if st.session_state.current_index < total_locations - 1:
                     st.session_state.current_index += 1
                 st.rerun()
+        
+        # Quick "No" button for rapid labeling
+        if st.button("⚡ Quick NO (Default)", help="Label as NO and move to next", use_container_width=True):
+            if current_filename not in st.session_state.labels:
+                st.session_state.labeled_count += 1
+            st.session_state.labels[current_filename] = 0
+            if st.session_state.current_index < total_locations - 1:
+                st.session_state.current_index += 1
+            st.rerun()
         
         st.markdown("---")
         
