@@ -13,8 +13,21 @@ st.markdown("Filter locations by land cover probability and label brick kiln pre
 
 @st.cache_data
 def load_data(csv_file):
-    """Load the selected CSV data"""
-    return pd.read_csv(csv_file)
+    """Load the selected CSV data with error handling"""
+    try:
+        # Try with error handling for malformed CSV
+        df = pd.read_csv(csv_file, on_bad_lines='skip', encoding='utf-8')
+        return df
+    except Exception as e:
+        st.error(f"Error reading CSV {csv_file}: {e}")
+        # Try with different parameters
+        try:
+            df = pd.read_csv(csv_file, on_bad_lines='skip', encoding='latin-1', sep=',')
+            st.warning(f"Loaded {csv_file} with fallback encoding")
+            return df
+        except Exception as e2:
+            st.error(f"Failed to load CSV: {e2}")
+            return pd.DataFrame()
 
 def get_available_csvs():
     """Get list of available CSV files"""
@@ -62,8 +75,21 @@ selected_csv = st.sidebar.selectbox(
 
 # Load selected data
 df = load_data(selected_csv)
+
+if df.empty:
+    st.error("Failed to load CSV file! Please check the file format.")
+    st.stop()
+
 st.sidebar.success(f"Loaded: {selected_csv}")
 st.sidebar.write(f"Total locations: {len(df)}")
+
+# Show CSV info for debugging
+with st.sidebar.expander("📊 CSV Info"):
+    st.write(f"Columns: {list(df.columns)}")
+    st.write(f"Shape: {df.shape}")
+    if len(df) > 0:
+        st.write("First few rows:")
+        st.write(df.head(2))
 
 # Sidebar for filtering
 st.sidebar.header("🔍 Filtering Options")
