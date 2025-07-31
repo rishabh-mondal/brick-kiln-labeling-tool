@@ -155,36 +155,11 @@ if not st.session_state.filtered_data.empty:
         # Debug coordinate info
         st.info(f"📍 Location: {current_data['filename']} → Lat: {lat:.4f}, Lon: {lon:.4f}")
         
-        # Create map with NO default tiles to force satellite imagery
-        m = geemap.Map(basemap=None, height="500px")
+        # Create map with reliable built-in satellite basemap
+        m = geemap.Map(center=[lat, lon], zoom=16, height="500px")
         
-        # Set center FIRST 
-        m.set_center(lon, lat, zoom=16)
-        
-        # Force REAL satellite imagery (not vector tiles)
-        # Google Earth style satellite imagery
-        m.add_tile_layer(
-            url='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name='Google Satellite (Real)',
-            attribution='Google Earth',
-            overlay=False
-        )
-        
-        # ESRI World Imagery - true satellite photos
-        m.add_tile_layer(
-            url='https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            name='ESRI Satellite (High-Res)',
-            attribution='ESRI',
-            overlay=False
-        )
-        
-        # Bing Aerial - another real satellite option
-        m.add_tile_layer(
-            url='https://ecn.t3.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1',
-            name='Bing Aerial',
-            attribution='Microsoft Bing',
-            overlay=False
-        )
+        # Use the most reliable built-in satellite basemap
+        m.add_basemap('SATELLITE')
         
         # Display map
         m.to_streamlit(height=500)
