@@ -206,74 +206,47 @@ if not st.session_state.filtered_data.empty:
         st_folium(m, width=700, height=500)
     
     with col2:
-        st.subheader("🏷️ Simple Kiln Labeling")
-        
-        # Progress info
+        # Current image info - BIG FONT at top
         total_locations = len(st.session_state.filtered_data)
-        progress = (st.session_state.current_index + 1) / total_locations
-        st.progress(progress)
+        st.markdown(f"# **IMAGE #{st.session_state.current_index + 1}** / {total_locations}")
         
-        # Current image info - BIG FONT
-        st.markdown(f"### 📷 **IMAGE #{st.session_state.current_index + 1}** of {total_locations}")
-        st.markdown(f"**File:** `{current_data['filename']}`")
+        # Navigation FIRST (most used)
+        col_prev, col_next = st.columns(2)
+        with col_prev:
+            if st.button("⬅️ **PREV**", disabled=(st.session_state.current_index == 0), use_container_width=True, key="prev"):
+                st.session_state.current_index -= 1
+                st.rerun()
+        with col_next:
+            if st.session_state.current_index < total_locations - 1:
+                if st.button("➡️ **NEXT**", use_container_width=True, key="next"):
+                    st.session_state.current_index += 1
+                    st.rerun()
+            else:
+                st.success("🎉 **DONE!**")
         
-        st.markdown("---")
-        
-        # Simplified approach - just note image numbers with kilns
-        st.markdown("### 🧱 **BRICK KILN TRACKING**")
-        st.markdown("**Instructions:** Note down the image numbers that have brick kilns. All others are assumed to have NO kilns.")
-        
-        # Text area for kiln image numbers
+        # Kiln tracking - compact
         if 'kiln_images' not in st.session_state:
             st.session_state.kiln_images = ""
         
         kiln_images = st.text_area(
-            "📝 **Image numbers WITH brick kilns** (comma-separated):",
+            "🧱 **Kiln image numbers:**",
             value=st.session_state.kiln_images,
-            height=100,
-            help="Example: 5, 12, 23, 45"
+            height=80,
+            help="e.g: 5, 12, 23"
         )
         
         if kiln_images != st.session_state.kiln_images:
             st.session_state.kiln_images = kiln_images
             st.rerun()
         
-        # Show current status
+        # Current status - compact
         current_image_num = st.session_state.current_index + 1
         kiln_image_numbers = [int(x.strip()) for x in kiln_images.split(',') if x.strip().isdigit()]
         
         if current_image_num in kiln_image_numbers:
-            st.success(f"✅ **Image #{current_image_num} marked as HAS KILN**")
+            st.success(f"✅ #{current_image_num} HAS KILN")
         else:
-            st.info(f"❌ **Image #{current_image_num} marked as NO KILN**")
-        
-        st.markdown("---")
-        
-        # Simple navigation
-        col_prev, col_next = st.columns(2)
-        
-        with col_prev:
-            if st.button("⬅️ **PREVIOUS**", disabled=(st.session_state.current_index == 0), use_container_width=True):
-                st.session_state.current_index -= 1
-                st.rerun()
-        
-        with col_next:
-            if st.session_state.current_index < total_locations - 1:
-                if st.button("➡️ **NEXT**", use_container_width=True):
-                    st.session_state.current_index += 1
-                    st.rerun()
-            else:
-                st.success("🎉 **ALL DONE!**")
-        
-        st.markdown("---")
-        
-        # Auto-save progress info
-        st.write("**💾 Auto-Save:**")
-        st.write("• Every location auto-labeled as 'NO KILN' by default")
-        st.write("• Only click YES if you actually see a brick kiln")
-        st.write("• Progress saved automatically as you navigate")
-        
-        st.markdown("---")
+            st.info(f"❌ #{current_image_num} NO KILN")
         
         # Export results
         if st.session_state.kiln_images.strip():
