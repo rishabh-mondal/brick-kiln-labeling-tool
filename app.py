@@ -152,20 +152,19 @@ if not st.session_state.filtered_data.empty:
         current_data = st.session_state.filtered_data.iloc[st.session_state.current_index]
         lat, lon = current_data['lat'], current_data['lon']
         
-        # Create geemap Map with high-quality satellite imagery (zoom 17 for better loading)
+        # Create geemap Map with reliable satellite imagery
         m = geemap.Map(center=[lat, lon], zoom=17, height="500px")
         
-        if ee_initialized:
-            try:
-                # Add very high resolution satellite imagery
-                image = ee.Image('GOOGLE/RESOLUTION_30M_DAILY').first()
-                m.addLayer(image, {'bands': ['B4', 'B3', 'B2'], 'max': 255}, 'Google High-Res')
-            except:
-                pass
+        # Use simple, fast-loading satellite basemaps
+        m.add_basemap('Google Satellite')  # Most reliable
+        m.add_basemap('Esri World Imagery')  # Backup
         
-        # Add multiple high-quality basemaps as fallback
-        m.add_basemap('SATELLITE')  # Google Satellite
-        m.add_basemap('Esri.WorldImagery')  # Esri World Imagery
+        # Add simple tile layers that load fast
+        m.add_tile_layer(
+            url='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            name='Google Satellite Direct',
+            attribution='Google'
+        )
         
         # Add marker for current location (centered)
         popup_text = f"""
