@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
-import geemap.foliumap as geemap
+import folium
+from streamlit_folium import st_folium
 import os
 from datetime import datetime
+import glob
 
 st.set_page_config(page_title="Brick Kiln Labeling Tool", layout="wide")
 
@@ -10,9 +12,40 @@ st.title("🧱 Brick Kiln Labeling Tool")
 st.markdown("Filter locations by land cover probability and label brick kiln presence")
 
 @st.cache_data
+<<<<<<< HEAD
 def load_data():
     """Load the CSV data"""
     return pd.read_csv("uttar_pradesh_land_cover_distribution.csv")
+=======
+def load_data(csv_file):
+    """Load the selected CSV data with error handling"""
+    try:
+        # Try with error handling for malformed CSV
+        df = pd.read_csv(csv_file, on_bad_lines='skip', encoding='utf-8')
+        return df
+    except Exception as e:
+        st.error(f"Error reading CSV {csv_file}: {e}")
+        # Try with different parameters
+        try:
+            df = pd.read_csv(csv_file, on_bad_lines='skip', encoding='latin-1', sep=',')
+            st.warning(f"Loaded {csv_file} with fallback encoding")
+            return df
+        except Exception as e2:
+            st.error(f"Failed to load CSV: {e2}")
+            return pd.DataFrame()
+
+def get_available_csvs():
+    """Get list of available CSV files"""
+    csvs = []
+    # Check main directory
+    for csv in glob.glob("*.csv"):
+        csvs.append(csv)
+    # Check data directory if it exists
+    if os.path.exists("data"):
+        for csv in glob.glob("data/*.csv"):
+            csvs.append(csv)
+    return csvs
+>>>>>>> 52940cf8e5d58ffbc899b946323a502e8e964af9
 
 def extract_coordinates(filename):
     """Extract lat, lon from filename like '28.6583_76.2294.png'"""
@@ -32,8 +65,37 @@ def initialize_session_state():
 
 initialize_session_state()
 
-# Load data
-df = load_data()
+# CSV Selection
+st.sidebar.header("📁 Data Selection")
+available_csvs = get_available_csvs()
+
+if not available_csvs:
+    st.error("No CSV files found! Please add CSV files to the main directory or data/ folder.")
+    st.stop()
+
+selected_csv = st.sidebar.selectbox(
+    "Choose CSV file:",
+    available_csvs,
+    index=0
+)
+
+# Load selected data
+df = load_data(selected_csv)
+
+if df.empty:
+    st.error("Failed to load CSV file! Please check the file format.")
+    st.stop()
+
+st.sidebar.success(f"Loaded: {selected_csv}")
+st.sidebar.write(f"Total locations: {len(df)}")
+
+# Show CSV info for debugging
+with st.sidebar.expander("📊 CSV Info"):
+    st.write(f"Columns: {list(df.columns)}")
+    st.write(f"Shape: {df.shape}")
+    if len(df) > 0:
+        st.write("First few rows:")
+        st.write(df.head(2))
 
 # Sidebar for filtering
 st.sidebar.header("🔍 Filtering Options")
@@ -79,15 +141,8 @@ elif filter_mode == "Any Category (Max %)":
         format="%.2f"
     )
     
-    # Show which categories to consider
-    categories_to_consider = st.sidebar.multiselect(
-        "Consider these categories:",
-        numeric_cols,
-        default=numeric_cols
-    )
-    
-    if not categories_to_consider:
-        categories_to_consider = numeric_cols
+    # Use all categories by default
+    categories_to_consider = numeric_cols
     
     filter_description = f"Max % across {len(categories_to_consider)} categories >= {threshold}%"
 
@@ -134,109 +189,91 @@ if not st.session_state.filtered_data.empty:
         # Debug coordinate info
         st.info(f"📍 Location: {current_data['filename']} → Lat: {lat:.4f}, Lon: {lon:.4f}")
         
-        # Create map with reliable built-in satellite basemap
-        m = geemap.Map(center=[lat, lon], zoom=16, height="500px")
+        # Create folium map with satellite imagery
+        m = folium.Map(location=[lat, lon], zoom_start=16)
         
-        # Use the most reliable built-in satellite basemap
-        m.add_basemap('SATELLITE')
+        # Add high-quality satellite tiles
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri World Imagery',
+            name='Satellite',
+            overlay=False,
+            control=True
+        ).add_to(m)
+        
+        # Add marker for location
+        folium.Marker(
+            [lat, lon],
+            popup=f"Image: {current_data['filename']}",
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(m)
         
         # Display map
-        m.to_streamlit(height=500)
+        st_folium(m, width=700, height=500)
     
     with col2:
-        st.subheader("🏷️ Labeling Interface")
-        
-        # Progress info
+        # Current image info - BIG FONT at top
         total_locations = len(st.session_state.filtered_data)
-        progress = (st.session_state.current_index + 1) / total_locations
-        st.progress(progress)
-        st.write(f"Location {st.session_state.current_index + 1} of {total_locations}")
-        st.write(f"Labeled: {st.session_state.labeled_count}")
+        st.markdown(f"# **IMAGE #{st.session_state.current_index + 1}** / {total_locations}")
         
-        # Current location info
-        st.write("**Current Location:**")
-        st.write(f"File: `{current_data['filename']}`")
-        st.write(f"Coordinates: {lat:.4f}, {lon:.4f}")
-        st.write(f"Dominant Category: {current_data['max_category']}")
-        st.write(f"Max Percentage: {current_data['max_percentage']:.2f}%")
-        
-        st.markdown("---")
-        
-        # Auto-default to NO for new locations (most won't have kilns)
-        current_filename = current_data['filename']
-        current_label = st.session_state.labels.get(current_filename, 0)  # Default to 0 (NO)
-        
-        # Auto-save as NO if not already labeled
-        if current_filename not in st.session_state.labels:
-            st.session_state.labels[current_filename] = 0
-            st.session_state.labeled_count += 1
-        
-        # Show current status with better UI
-        if current_label == 1:
-            st.success("✅ **BRICK KILN PRESENT** - Click NO to change")
-        else:
-            st.info("❌ **NO BRICK KILN** (default) - Click YES if you see one")
-        
-        st.markdown("---")
-        
-        # Simple YES button (only needed if kiln is present)
-        if st.button("🧱 **YES - BRICK KILN PRESENT**", type="primary", use_container_width=True):
-            st.session_state.labels[current_filename] = 1
-            if st.session_state.current_index < total_locations - 1:
-                st.session_state.current_index += 1
-            st.rerun()
-        
-        # Small NO button (just in case user wants to revert)
-        if current_label == 1:  # Only show if currently YES
-            if st.button("❌ Change to NO", use_container_width=True):
-                st.session_state.labels[current_filename] = 0
-                if st.session_state.current_index < total_locations - 1:
-                    st.session_state.current_index += 1
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Simple navigation
+        # Navigation FIRST (most used)
         col_prev, col_next = st.columns(2)
-        
         with col_prev:
-            if st.button("⬅️ **PREVIOUS**", disabled=(st.session_state.current_index == 0), use_container_width=True):
+            if st.button("⬅️ **PREV**", disabled=(st.session_state.current_index == 0), use_container_width=True, key="prev"):
                 st.session_state.current_index -= 1
                 st.rerun()
-        
         with col_next:
             if st.session_state.current_index < total_locations - 1:
-                if st.button("➡️ **NEXT**", use_container_width=True):
+                if st.button("➡️ **NEXT**", use_container_width=True, key="next"):
                     st.session_state.current_index += 1
                     st.rerun()
             else:
-                st.success("🎉 **ALL DONE!**")
+                st.success("🎉 **DONE!**")
         
-        st.markdown("---")
+        # Kiln tracking - compact
+        if 'kiln_images' not in st.session_state:
+            st.session_state.kiln_images = ""
         
-        # Auto-save progress info
-        st.write("**💾 Auto-Save:**")
-        st.write("• Every location auto-labeled as 'NO KILN' by default")
-        st.write("• Only click YES if you actually see a brick kiln")
-        st.write("• Progress saved automatically as you navigate")
+        kiln_images = st.text_area(
+            "🧱 **Kiln image numbers:**",
+            value=st.session_state.kiln_images,
+            height=80,
+            help="e.g: 5, 12, 23"
+        )
         
-        st.markdown("---")
+        if kiln_images != st.session_state.kiln_images:
+            st.session_state.kiln_images = kiln_images
+            st.rerun()
+        
+        # Current status - compact
+        current_image_num = st.session_state.current_index + 1
+        kiln_image_numbers = [int(x.strip()) for x in kiln_images.split(',') if x.strip().isdigit()]
+        
+        if current_image_num in kiln_image_numbers:
+            st.success(f"✅ #{current_image_num} HAS KILN")
+        else:
+            st.info(f"❌ #{current_image_num} NO KILN")
         
         # Export results
-        if st.session_state.labels:
-            st.write("**Export Labels**")
+        if st.session_state.kiln_images.strip():
+            st.write("**💾 Export Results**")
             
-            # Create results DataFrame
+            # Create results from image numbers
+            kiln_image_numbers = [int(x.strip()) for x in st.session_state.kiln_images.split(',') if x.strip().isdigit()]
+            
             results = []
-            for filename, label in st.session_state.labels.items():
-                row_data = st.session_state.filtered_data[st.session_state.filtered_data['filename'] == filename].iloc[0]
+            for idx, row in st.session_state.filtered_data.iterrows():
+                image_num = idx + 1
+                has_kiln = 1 if image_num in kiln_image_numbers else 0
+                
                 results.append({
-                    'filename': filename,
-                    'lat': row_data['lat'],
-                    'lon': row_data['lon'],
-                    'brick_kiln': label,
-                    'dominant_category': row_data['max_category'],
-                    'max_percentage': row_data['max_percentage']
+                    'image_number': image_num,
+                    'filename': row['filename'],
+                    'lat': row['lat'],
+                    'lon': row['lon'],
+                    'brick_kiln': has_kiln,
+                    'dominant_category': row['max_category'],
+                    'max_percentage': row['max_percentage']
                 })
             
             results_df = pd.DataFrame(results)
@@ -244,10 +281,14 @@ if not st.session_state.filtered_data.empty:
             # Download button
             csv = results_df.to_csv(index=False)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+<<<<<<< HEAD
             filename = f"brick_kiln_labels{timestamp}.csv"
+=======
+            filename = f"brick_kiln_results_{timestamp}.csv"
+>>>>>>> 52940cf8e5d58ffbc899b946323a502e8e964af9
             
             st.download_button(
-                label="💾 Download Labels",
+                label="💾 Download Results",
                 data=csv,
                 file_name=filename,
                 mime="text/csv",
@@ -255,9 +296,10 @@ if not st.session_state.filtered_data.empty:
             )
             
             # Show summary
-            kiln_count = sum(st.session_state.labels.values())
-            total_labeled = len(st.session_state.labels)
-            st.write(f"**Summary:** {kiln_count} kilns found in {total_labeled} labeled locations")
+            kiln_count = len(kiln_image_numbers)
+            total_images = len(st.session_state.filtered_data)
+            st.write(f"**Summary:** {kiln_count} kilns found in {total_images} total images")
+            st.write(f"**Kiln images:** {', '.join(map(str, sorted(kiln_image_numbers)))}")
 
 else:
     st.info("👆 Please apply a filter to start labeling locations.")
