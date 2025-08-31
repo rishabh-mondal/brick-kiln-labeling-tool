@@ -12,7 +12,7 @@ st.markdown("Filter locations by land cover probability and label brick kiln pre
 @st.cache_data
 def load_data():
     """Load the CSV data"""
-    return pd.read_csv("haryana_land_cover_distribution.csv")
+    return pd.read_csv("uttar_pradesh_land_cover_distribution.csv")
 
 def extract_coordinates(filename):
     """Extract lat, lon from filename like '28.6583_76.2294.png'"""
@@ -244,7 +244,7 @@ if not st.session_state.filtered_data.empty:
             # Download button
             csv = results_df.to_csv(index=False)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"brick_kiln_labels_{timestamp}.csv"
+            filename = f"brick_kiln_labels{timestamp}.csv"
             
             st.download_button(
                 label="💾 Download Labels",
